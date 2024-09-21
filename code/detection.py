@@ -12,20 +12,20 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from detectionDataset import DetectionDataset, DetectionPrefetcher, collate_fn
 
 # Constants
-num_epochs = 1
-num_classes = 5
+num_epochs = 2
+num_classes = 1
 batch_size = 4
-img_width = 256
-img_height = 144
+img_width = 480 # 256
+img_height = 270 # 144
 learning_rate = 1e-4
 momentum = 0.9
-tresh = 0.5
-overlap = 0.5
+tresh = 0.38
+overlap = 0.6
 resume_training = True
-show_examples = True
+show_examples = False
 device = torch.device("cuda", 0)
 save_folder = f'./results/detection/FastRCNN_{num_classes}_{img_width}x{img_height}/'
-model_weights_path = save_folder + 'epoch_2_True.pth.tar'
+model_weights_path = save_folder + 'epoch_6_True.pth.tar'
 
 def main():
     # Load data
@@ -43,7 +43,7 @@ def main():
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=momentum, nesterov=True)
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, num_epochs, 1, verbose=False)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 10, 1, verbose=False)
 
     warmup_factor = 1.0 / 1000
     warmup_iters = min(1000, len(train_prefetcher) - 1)
@@ -347,10 +347,10 @@ def valid_plots() -> None:
     targets = []
     preds = []
     treshs = []
-    for lim in range(0,76,2):
+    for lim in range(0,100,2):
         preds.append([])
         targets.append([])
-        treshs.append((100-lim)/100) # lim/100 za tresh
+        treshs.append(lim/100)
     
     with torch.no_grad():
         while batch_data is not None:
@@ -390,26 +390,30 @@ def valid_plots() -> None:
     
     map50 = []
     map75 = []
+    mar = []
     for j in range(len(treshs)):
         metric = MeanAveragePrecision()
         metric.update(preds[j], targets[j])
         metric_summary = metric.compute()
         map50.append(metric_summary['map_50'])
         map75.append(metric_summary['map_75'])
+        mar.append(metric_summary['mar_100'])
 
     plt.figure()
     plt.plot(treshs, map50)
     plt.plot(treshs, map75)
+    plt.plot(treshs, mar)
     plt.title('Zavisnost MaP50 i MaP75 metrika od praga preklapanja detektora za prag od 0.38')
     plt.show()
 
     return
 
 if __name__ == "__main__":
-    # visualizeData()
+    visualizeData()
     main()
     # valid_plots()
     # test()
 
     # tensorboard --logdir=results/detection
-    
+    # python train.py --img 480 --batch 16 --epochs 30 --single-cls --data recycle.yaml --weights yolov5m.pt
+    # python val.py --img 480 --batch 16 --single-cls --data recycle.yaml --weights runs\train\exp5\weights\best.pt --task test

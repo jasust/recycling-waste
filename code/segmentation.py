@@ -17,7 +17,7 @@ batch_size = 28
 learning_rate = 1e-5
 momentum = 0.9
 weight_decay = 1e-06
-base_size = 64
+base_size = 32
 bilinear = True
 imgsize = 256
 preprocessing = 1
@@ -25,7 +25,7 @@ device = torch.device("cuda", 0)
 
 resume_training = False
 save_folder = f'./results/segmentation/UNet_{base_size}_{bilinear}_{imgsize}_{preprocessing}/'
-model_weights_path = save_folder + 'epoch_39_True.pth.tar'
+model_weights_path = save_folder + 'epoch_38_True.pth.tar'
 
 def main():
     # Load data
@@ -157,7 +157,7 @@ def validate(model: torch.nn.Module,
 
 def test():
     # Load data
-    start = time.time()    
+    start = time.time()
     test_prefetcher = create_prefetcher('test')
     end = time.time() - start
     print('Loading data finished... (%.2fs)' % end)
@@ -208,16 +208,16 @@ def test():
 
                     dice_score[j] += dice_numpy(pred, msk)
 
-                    if j == 3:
-                        plt.figure()
-                        plt.subplot(1, 3, 1)
-                        plt.imshow(img)
-                        plt.subplot(1, 3, 2)
-                        plt.imshow(msk)
-                        plt.subplot(1, 3, 3)
-                        plt.imshow(pred)
-                        plt.suptitle('Plava flasa')
-                        plt.show()
+                    # if j == 3:
+                    #     plt.figure()
+                    #     plt.subplot(1, 3, 1)
+                    #     plt.imshow(img)
+                    #     plt.subplot(1, 3, 2)
+                    #     plt.imshow(msk)
+                    #     plt.subplot(1, 3, 3)
+                    #     plt.imshow(pred)
+                    #     plt.suptitle('Plava flasa')
+                    #     plt.show()
 
             print(f"Test dice score is {dice_score.max()/28*100}%")
             end = time.time() - start

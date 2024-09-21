@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch import Tensor
-from typing import List, Tuple
+from typing import List
 from collections import OrderedDict
 
 class DenseNet(nn.Module):
@@ -55,9 +55,12 @@ class DenseNet(nn.Module):
         self._initialize_weights()
 
     def forward(self, x: Tensor) -> Tensor:
-        out = self.features(x)
-        #  x.register_hook(self.activations_hook)
-        out = self.avgpool(out)
+        x = self.features(x)
+
+        # Register the hook for GradCam
+        x.register_hook(self.activations_hook)
+
+        out = self.avgpool(x)
         out = torch.flatten(out, 1)
         out = self.classifier(out)
 
