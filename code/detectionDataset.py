@@ -7,8 +7,10 @@ from dataset import ImageDataset, Prefetcher
 class DetectionDataset(ImageDataset):
     def __init__(self, mode: str, mean: list, std: list, num_classes: int, width=256, height=144) -> None:
         super().__init__(mode, mean, std)
-        self.image_file_paths = glob(f"data/Warp-D/{mode}/images/resized/*")
-        self.annot_file_paths = glob(f"data/Warp-D/{mode}/labels/*")
+        # self.image_file_paths = glob(f"data/Warp-D/{mode}/images/resized/*")
+        # self.annot_file_paths = glob(f"data/Warp-D/{mode}/labels/*")
+        self.image_file_paths = glob(f"yolov5/datasets/{mode}/images/*")
+        self.annot_file_paths = glob(f"yolov5/datasets/{mode}/labels/*")
         self.height = height
         self.width = width
         self.num_classes = num_classes

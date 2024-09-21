@@ -8,7 +8,7 @@ from torchvision import transforms
 from dataset import ImageDataset, Prefetcher
 
 class ClassificationDataset(ImageDataset):
-    def __init__(self, mode: str, mean: list, std: list, prepr: int=0) -> None:
+    def __init__(self, mode: str, mean: list, std: list, prepr: int=0, gradCam: bool=False) -> None:
         super().__init__(mode, mean, std)
         self.image_file_paths = glob(f"data/Warp-C/{mode}_crops/*/*/*")
         classes = []
@@ -20,6 +20,7 @@ class ClassificationDataset(ImageDataset):
         self.image_size = 224
         self.mode = mode
         self.prepr = prepr
+        self.gradCam = gradCam and mode == 'test'
 
         if self.mode == "train":
             self.pre_transform = transforms.Compose([
@@ -44,7 +45,7 @@ class ClassificationDataset(ImageDataset):
 
         return np.sum(numSamples) / (numSamples[:] * 28)
 
-    def __getitem__(self, batch_index: int) -> [torch.Tensor, int]:
+    def __getitem__(self, batch_index: int): #  -> Union[torch.Tensor, torch.Tensor, int]
         image_dir, _ = self.image_file_paths[batch_index].split('\\')[-2:]
         image = cv2.imread(self.image_file_paths[batch_index])
         if self.prepr & 1:
@@ -58,10 +59,13 @@ class ClassificationDataset(ImageDataset):
 
         image = Image.fromarray(image)
         image = self.pre_transform(image)
-        tensor = image_to_tensor(image)
-        tensor = self.post_transform(tensor)
+        img_tensor = image_to_tensor(image)
+        tensor = self.post_transform(img_tensor)
 
+        if self.gradCam:
+            return {"image": tensor, "og_image": img_tensor, "target": target}
         return {"image": tensor, "target": target}
+
     
 class ClassificationPrefetcher(Prefetcher):
     def preload(self):

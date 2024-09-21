@@ -52,17 +52,7 @@ class SegmentationDataset(ImageDataset):
             denoised = denoise_tv_bregman(image/255.0, 4)
             image = (denoised*255).astype(np.uint8)
         if self.prepr & 4:
-            image = cv2.bilateralFilter(image, 15, 75, 75)
-
-        # if self.mode == "train":
-        #     hf = np.random.rand() > 0.5
-        #     vf = np.random.rand() > 0.5
-        #     self.pre_transform = transforms.Compose([
-        #         transforms.Resize(200, max_size=self.image_size),
-        #         transforms.CenterCrop(self.image_size),
-        #         transforms.RandomHorizontalFlip(hf),
-        #         transforms.RandomVerticalFlip(vf),
-        #     ])         
+            image = cv2.bilateralFilter(image, 15, 75, 75)       
 
         image = Image.fromarray(image)
         if self.mode != 'train':

@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from denseNet import DenseNet
 import matplotlib.pyplot as plt
+from utils import tensor_to_image
 from utils import save_checkpoint
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
@@ -12,27 +13,28 @@ from torch.utils.tensorboard import SummaryWriter
 from classificationDataset import ClassificationDataset, ClassificationPrefetcher
 
 # Constants
-num_epochs = 4
-batch_size = 64
+num_epochs = 2
+batch_size = 32
 netType = 121
 learning_rate = 0.01
-dropout_rate = 0.0 # 0.2
+dropout_rate = 0.2 # 0.2
 momentum = 0.9
 weight_decay = 2e-05
 label_smoothing = 0.1
 T_mult = 1
 eta_min = 5e-5
-prepr = 1
-weighted = False
+prepr = 0
+weighted = True
+gradCam = False
 device = torch.device("cuda", 0)
 
-resume_training = False
+resume_training = True
 save_folder = f'./results/classification/DenseNet{netType}_{dropout_rate}_{learning_rate}_{prepr}_{weighted}/'
-model_weights_path = save_folder + 'epoch_24_True.pth.tar'
+model_weights_path = save_folder + 'epoch_25_True.pth.tar'
 
 def main():
     # Load data
-    start = time.time()   
+    start = time.time()
     train_prefetcher, weights = create_prefetcher('train')
     valid_prefetcher, _ = create_prefetcher('valid')
     end = time.time() - start
@@ -239,41 +241,60 @@ def test():
     batch_data = test_prefetcher.next()
     start = time.time()
 
-    with torch.no_grad():
-        while batch_data is not None:
-            images = batch_data["image"].to(device=device, non_blocking=True)
-            target = batch_data["target"].to(device=device, non_blocking=True)
+    while batch_data is not None:
+        images = batch_data["image"].to(device=device, non_blocking=True)
+        target = batch_data["target"].to(device=device, non_blocking=True)
 
-            batch_size1 = images.size(0)
-            output = model(images)
-            torch.cuda.synchronize()
+        batch_size1 = images.size(0)
+        output = model(images) # batch_size x num_classes
+        torch.cuda.synchronize()
 
-            # Calculate accuracy
-            pred = output.argmax(dim=1)
-            acc = pred.t().eq(target).sum()
-            targets[num_examples:num_examples+batch_size1] = np.reshape(target.numpy(force=True),(batch_size1,1))
-            predictions[num_examples:num_examples+batch_size1] = np.reshape(pred.t().numpy(force=True),(batch_size1,1))
-            cum_acc += acc
-            num_examples += batch_size1
+        # Calculate accuracy
+        pred = output.argmax(dim=1) # batch_size
+        acc = pred.t().eq(target).sum()
+        targets[num_examples:num_examples+batch_size1] = np.reshape(target.numpy(force=True),(batch_size1,1))
+        predictions[num_examples:num_examples+batch_size1] = np.reshape(pred.t().numpy(force=True),(batch_size1,1))
+        cum_acc += acc
+        num_examples += batch_size1
 
-            # Grad-cam
-            # pred.backward()
-            # gradients = model.get_activations_gradient()
-            # pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
-            # activations = model.get_activations(images).detach()
-            # print(activations)
-            # for i in range(512):
-            #     activations[:, i, :, :] *= pooled_gradients[i]
-            # heatmap = torch.mean(activations, dim=1).squeeze()
-            # heatmap = np.maximum(heatmap, 0)
-            # heatmap /= torch.max(heatmap)
+        # Grad-cam
+        if gradCam:
+            og_images = batch_data["og_image"].to(device=device, non_blocking=True)
+            output[:,pred[:]].sum().backward() # 64x64
             
-            # plt.figure
-            # plt.matshow(heatmap.squeeze())
-            # plt.show()
+            gradients = model.get_activations_gradient()
+            pooled_gradients = torch.mean(gradients, dim=[0, 2, 3]) # 1024
+            activations = model.get_activations(images).detach() # 64x1024x7x7
+            for i in range(1024):
+                activations[:, i, :, :] *= pooled_gradients[i]
 
-            # Preload the next batch of data
-            batch_data = test_prefetcher.next()
+            heatmap = torch.mean(activations, dim=1).squeeze().cpu()
+            heatmap = np.maximum(heatmap, 0)
+            heatmap /= torch.max(heatmap)
+            heatmap = heatmap.numpy()
+
+            for i in range(batch_size1):
+                img = tensor_to_image(og_images[i], False)
+                heatmap1 = cv2.resize(heatmap[i], (img.shape[0], img.shape[1]))
+                heatmap1 = np.uint8(255 * heatmap1)
+                heatmap1 = cv2.applyColorMap(heatmap1, cv2.COLORMAP_JET)
+                segmentated = (heatmap1[:,:,1] > 250) + (heatmap1[:,:,2] > 250)
+                superimposed_img = heatmap1 * 0.4 + img
+                superimposed_img = np.minimum(superimposed_img, 255)
+
+                plt.figure()
+                plt.subplot(2, 2, 1)
+                plt.imshow(np.uint8(img))
+                plt.subplot(2, 2, 2)
+                plt.imshow(heatmap1)
+                plt.subplot(2, 2, 3)
+                plt.imshow(np.uint8(superimposed_img))
+                plt.subplot(2, 2, 4)
+                plt.imshow(segmentated)
+                plt.show()
+
+        # Preload the next batch of data
+        batch_data = test_prefetcher.next()
 
     print(f"Test accuracy is {cum_acc*100/num_examples}%")
     end = time.time() - start
@@ -300,7 +321,7 @@ def create_prefetcher(mode) -> ClassificationPrefetcher:
     std = [0.229, 0.224, 0.225]
     isTrain = mode == 'train'
 
-    dataset = ClassificationDataset(mode, mean, std, prepr)
+    dataset = ClassificationDataset(mode, mean, std, prepr, gradCam)
     weights = dataset.get_weights() if isTrain else []
 
     dataloader = DataLoader(dataset,
@@ -313,10 +334,8 @@ def create_prefetcher(mode) -> ClassificationPrefetcher:
     return ClassificationPrefetcher(dataloader, device), weights
 
 if __name__ == "__main__":
-    # visualizeData()
+    visualizeData()
     main()
     # test()
     
-    # tensorboard --logdir=results/classification/new
-
-
+    # tensorboard --logdir=results/classification
